@@ -97,7 +97,15 @@ def explain(machine_id, analysis):
     lines = [f"{machine_id} — {severity} alert ({confidence}% confidence)"]
 
     # 1. ROOT CAUSE REASONING
+    systemic = analysis.get("systemic")
     hypothesis = get_root_cause(triggered, analysis.get("compound_result"))
+    
+    if systemic:
+        lines.append(f"\n[SYSTEMIC CONTEXT — INFRASTRUCTURE ALERT]")
+        lines.append(f"  {systemic['id']}: {systemic['name']}")
+        lines.append(f"  Victims: {machine_id}, {', '.join(correlated)}")
+        lines.append(f"  Hypothesis: Shared environmental/power failure confirmed across multiple nodes.")
+
     if hypothesis:
         lines.append(f"\n[DIAGNOSTIC HYPOTHESIS]")
         if "id" in hypothesis:
@@ -139,9 +147,7 @@ def explain(machine_id, analysis):
         lines.append(f"  At current drift rate, {machine_id} will exceed safe {label} limits {ttf_phrase}.")
 
     # 4. SYSTEMIC CONTEXT
-    if correlated:
-        lines.append(f"\n[SYSTEMIC CONTEXT]")
-        lines.append(f"  Identified correlated behavior on {', '.join(correlated)}. This may be a facility-wide power/cooling issue.")
+    # (Removed redundant systemic section as it is now part of the top Hypothesis)
 
     # 5. RECOMMENDED ACTION
     lines.append(f"\n[RECOMMENDED ACTION]")

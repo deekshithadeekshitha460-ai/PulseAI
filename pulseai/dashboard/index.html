@@ -69,14 +69,21 @@
 
         #systemic-banner {
             display: none;
-            background: #FF4D4D22;
-            border: 1px solid #FF4D4D;
-            color: #FF4D4D;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 16px;
+            background: linear-gradient(90deg, #FF4D4D22 0%, #FF000044 100%);
+            border: 2px solid #FF4D4D;
+            color: #fff;
+            padding: 16px 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
             font-weight: bold;
-            animation: border-pulse 1s infinite;
+            box-shadow: 0 0 20px #FF4D4D33;
+            animation: systemic-pulse 2s infinite;
+        }
+
+        @keyframes systemic-pulse {
+            0% { box-shadow: 0 0 10px #FF4D4D33; border-color: #FF4D4D; }
+            50% { box-shadow: 0 0 30px #FF4D4D66; border-color: #FF0000; }
+            100% { box-shadow: 0 0 10px #FF4D4D33; border-color: #FF4D4D; }
         }
 
         @keyframes border-pulse {
@@ -815,16 +822,26 @@
         function renderSystemicBanner(alerts) {
             const banner = document.getElementById("systemic-banner");
             const recent = alerts.filter(a => !a.acknowledged);
+            
+            // Find the most recent systemic issue meta
+            const systemicAlert = recent.find(a => a.systemic);
+            
             const criticalMachines = [...new Set(
                 recent.filter(a => ["HIGH", "CRITICAL"].includes(a.severity))
-                    .flatMap(a => a.correlated || []).concat(
-                        recent.filter(a => ["HIGH", "CRITICAL"].includes(a.severity))
-                            .map(a => a.machine_id)
-                    )
+                    .flatMap(a => (a.correlated || []).concat([a.machine_id]))
             )];
+
             if (criticalMachines.length >= 2) {
+                const issueName = systemicAlert?.systemic?.name || "Shared Infrastructure Failure";
+                const issueId = systemicAlert?.systemic?.id || "S-CORR";
+                
                 banner.style.display = "block";
-                banner.textContent = `SYSTEMIC ISSUE DETECTED — ${criticalMachines.join(", ")} showing correlated anomalies. Possible shared infrastructure failure.`;
+                banner.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>⚠️ <span style="color:#FF4D4D; margin-right:8px;">[${issueId}]</span> ${issueName.toUpperCase()}</span>
+                        <span style="font-size:11px; opacity:0.8;">AFFECTED: ${criticalMachines.join(", ")}</span>
+                    </div>
+                `;
             } else {
                 banner.style.display = "none";
             }

@@ -165,12 +165,20 @@ def detect_compound_failure(triggered_sensors, drifts):
 
 def check_cross_machine_correlation(machine_id, sensor):
     """
-    If the same sensor is anomalous on 2+ machines within 60 seconds,
-    it's probably a shared infrastructure problem (power, cooling, floor vibration).
+    Identifies if a sensor anomaly is occurring synchronously 
+    across multiple machines (Systemic Correlation).
+    Returns: (list_of_correlated_machines, systemic_type)
     """
+    SYSTEMIC_TYPES = {
+        "temperature_C":  {"id": "S-01", "name": "Facility Cooling / Ambient Thermal Failure"},
+        "current_A":      {"id": "S-02", "name": "Main Power Supply / Phase Fluctuation"},
+        "vibration_mm_s": {"id": "S-03", "name": "Structural Resonance / Floor Vibration"},
+        "rpm":            {"id": "S-04", "name": "Grid Frequency Instability"}
+    }
+
     with log_lock:
         now = time.time()
-        # Clean old entries
+        # Clean old entries (> 60s)
         for mid in list(recent_alert_log.keys()):
             recent_alert_log[mid] = [
                 a for a in recent_alert_log[mid]
@@ -182,7 +190,9 @@ def check_cross_machine_correlation(machine_id, sensor):
             if mid != machine_id and
             any(a["sensor"] == sensor for a in alerts)
         ]
-        return correlated
+        
+        systemic_meta = SYSTEMIC_TYPES.get(sensor) if correlated else None
+        return correlated, systemic_meta
 
 
 def analyze(machine_id, reading, baselines):
@@ -258,10 +268,14 @@ def analyze(machine_id, reading, baselines):
 
     # ── CROSS-MACHINE CORRELATION ─────────────────────────────────────
     correlated_machines = []
+    systemic_issue = None
     if triggered:
         for t in triggered:
-            correlated = check_cross_machine_correlation(machine_id, t["sensor"])
-            correlated_machines.extend(correlated)
+            correlated, systemic = check_cross_machine_correlation(machine_id, t["sensor"])
+            if correlated:
+                correlated_machines.extend(correlated)
+                systemic_issue = systemic # pick the last one triggered (heuristic)
+    
     correlated_machines = list(set(correlated_machines))
 
     # ── RISK SCORE 0–100 ──────────────────────────────────────────────
@@ -287,6 +301,7 @@ def analyze(machine_id, reading, baselines):
         "drift_flags":         drift_flags,
         "compound":            compound_name,
         "compound_result":     compound_result,
+        "systemic":            systemic_issue,
         "confidence":          confidence,
         "correlated_machines": correlated_machines,
         "severity":            classify(risk_score)
