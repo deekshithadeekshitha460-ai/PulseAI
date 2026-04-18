@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>PulseAI — Live Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: #0A0F1E;
+            color: #fff;
+            font-family: sans-serif;
+            padding: 16px;
+        }
+
+        h1 {
+            color: #00BFA6;
+            font-size: 24px;
+        }
+
+        .subtitle {
+            color: #8ECFCC;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .live-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #00BFA6;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.3
+            }
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #111D35;
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+        #clock {
+            color: #8ECFCC;
+            font-size: 14px;
+        }
+
+        #systemic-banner {
+            display: none;
+            background: #FF4D4D22;
+            border: 1px solid #FF4D4D;
+            color: #FF4D4D;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: bold;
+            animation: border-pulse 1s infinite;
+        }
+
+        @keyframes border-pulse {
+
+            0%,
+            100% {
+                border-color: #FF4D4D
+            }
+
+            50% {
+                border-color: #FF000055
+            }
+        }
+
+        .machines-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .machine-card {
+            background: #111D35;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1.5px solid #1E2D50;
+            transition: border-color 0.3s;
+        }
+
+        .machine-card.healthy {
+            border-color: #34D399;
+        }
+
+        .machine-card.medium {
+            border-color: #FF8A00;
+        }
+
+        .machine-card.critical {
+            border-color: #FF4D4D;
+        }
+
+        .machine-name {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+
+        .health-ring-wrap {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+
+        .health-ring-wrap svg {
+            width: 80px;
+            height: 80px;
+        }
+
+        .sensor-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            padding: 3px 0;
+            border-bottom: 1px solid #1E2D50;
+        }
+
+        .sensor-label {
+            color: #8ECFCC;
+        }
+
+        .sensor-val {
+            font-weight: bold;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+
+        .dot.green {
+            background: #34D399;
+        }
+
+        .dot.amber {
+            background: #FF8A00;
+        }
+
+        .dot.red {
+            background: #FF4D4D;
+        }
+
+        .stream-pill {
+            margin-top: 10px;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+
+        .stream-pill.live {
+            background: #34D39922;
+            color: #34D399;
+        }
+
+        .stream-pill.reconnecting {
+            background: #FF8A0022;
+            color: #FF8A00;
+        }
+
+        .heatmap-section {
+            background: #111D35;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .heatmap-section h2 {
+            font-size: 14px;
+            color: #8ECFCC;
+            margin-bottom: 12px;
+        }
+
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(4, 1fr);
+            gap: 4px;
+        }
+
+        .hm-header {
+            font-size: 11px;
+            color: #8ECFCC;
+            text-align: center;
+            padding: 6px 4px;
+            font-weight: bold;
+        }
+
+        .hm-row-label {
+            font-size: 11px;
+            color: #8ECFCC;
+            display: flex;
+            align-items: center;
+            padding-left: 4px;
+        }
+
+        .hm-cell {
+            border-radius: 6px;
+            padding: 6px 4px;
+            text-align: center;
+            font-size: 11px;
+            transition: background 0.5s;
+        }
+
+        .hm-cell .val {
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .hm-cell .sig {
+            font-size: 9px;
+            color: #8ECFCC;
+        }
+
+        .bottom-row {
+            display: grid;
+            grid-template-columns: 3fr 2fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .alert-feed {
+            background: #111D35;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .alert-feed h2 {
+            font-size: 14px;
+            color: #8ECFCC;
+            margin-bottom: 12px;
+        }
+
+        .alert-card {
+            border-left: 3px solid #888;
+            background: #0A0F1E;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            transition: opacity 0.3s;
+        }
+
+        .alert-card.acknowledged {
+            opacity: 0.4;
+        }
+
+        .alert-card .top-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .severity-badge {
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .badge-CRITICAL {
+            background: #FF4D4D22;
+            color: #FF4D4D;
+        }
+
+        .badge-HIGH {
+            background: #FF8A0022;
+            color: #FF8A00;
+        }
+
+        .badge-MEDIUM {
+            background: #EF9F2722;
+            color: #EF9F27;
+        }
+
+        .badge-LOW {
+            background: #34D39922;
+            color: #34D399;
+        }
+
+        .compound-pill {
+            background: #00BFA622;
+            color: #00BFA6;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-top: 4px;
+            display: inline-block;
+        }
+
+        .alert-msg {
+            font-family: monospace;
+            color: #ccc;
+            white-space: pre-wrap;
+            font-size: 11px;
+            margin: 6px 0;
+        }
+
+        .slot-text {
+            color: #34D399;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .ack-btn {
+            background: #1E2D50;
+            border: none;
+            color: #8ECFCC;
+            cursor: pointer;
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            margin-top: 6px;
+        }
+
+        .ack-btn:hover {
+            background: #2A3D60;
+        }
+
+        .ttf-panel {
+            background: #111D35;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .ttf-panel h2 {
+            font-size: 14px;
+            color: #8ECFCC;
+            margin-bottom: 12px;
+        }
+
+        .ttf-item {
+            background: #0A0F1E;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+        }
+
+        .ttf-machine {
+            font-size: 12px;
+            color: #8ECFCC;
+            margin-bottom: 4px;
+        }
+
+        .ttf-countdown {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .ttf-countdown.green {
+            color: #34D399;
+        }
+
+        .ttf-countdown.amber {
+            color: #FF8A00;
+        }
+
+        .ttf-countdown.red {
+            color: #FF4D4D;
+            animation: pulse 1s infinite;
+        }
+
+        .ttf-sensor {
+            font-size: 11px;
+            color: #8ECFCC;
+            margin-top: 4px;
+        }
+
+        .chart-section {
+            background: #111D35;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .chart-section h2 {
+            font-size: 14px;
+            color: #8ECFCC;
+            margin-bottom: 12px;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        select {
+            background: #0A0F1E;
+            color: #fff;
+            border: 1px solid #1E2D50;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .calendar-section {
+            background: #111D35;
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .calendar-section h2 {
+            font-size: 14px;
+            color: #8ECFCC;
+            margin-bottom: 12px;
+        }
+
+        .cal-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #0A0F1E;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .cal-check {
+            color: #34D399;
+            font-size: 18px;
+        }
+
+        .cal-machine {
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .cal-slot {
+            font-size: 12px;
+            color: #8ECFCC;
+        }
+
+        .no-schedule {
+            color: #444;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <div class="header">
+        <div>
+            <h1><span class="live-dot"></span>PulseAI</h1>
+            <div class="subtitle">Predictive Maintenance Agent — Team SAHASTRIX — Hack Malenadu 2026</div>
+        </div>
+        <div id="clock">--:--:--</div>
+    </div>
+
+    <!-- SYSTEMIC BANNER -->
+    <div id="systemic-banner"></div>
+
+    <!-- MACHINE CARDS -->
+    <div class="machines-grid" id="machines-grid"></div>
+
+    <!-- SENSOR HEATMAP -->
+    <div class="heatmap-section">
+        <h2>Sensor deviation heatmap</h2>
+        <div class="heatmap-grid" id="heatmap"></div>
+    </div>
+
+    <!-- ALERT FEED + TTF -->
+    <div class="bottom-row">
+        <div class="alert-feed">
+            <h2>Live alert feed</h2>
+            <div id="alert-list"></div>
+        </div>
+        <div class="ttf-panel">
+            <h2>Time-to-failure estimates</h2>
+            <div id="ttf-list"></div>
+        </div>
+    </div>
+
+    <!-- TIMELINE CHART -->
+    <div class="chart-section">
+        <h2>Sensor timeline — last 60 seconds</h2>
+        <div class="chart-controls">
+            <select id="chart-machine">
+                <option>CNC_01</option>
+                <option>CNC_02</option>
+                <option>PUMP_03</option>
+                <option>CONVEYOR_04</option>
+            </select>
+            <select id="chart-sensor">
+                <option value="temperature_C">Temperature (°C)</option>
+                <option value="vibration_mm_s">Vibration (mm/s)</option>
+                <option value="rpm">RPM</option>
+                <option value="current_A">Current (A)</option>
+            </select>
+        </div>
+        <canvas id="timeline-chart" height="80"></canvas>
+    </div>
+
+    <!-- MAINTENANCE CALENDAR -->
+    <div class="calendar-section">
+        <h2>Upcoming maintenance</h2>
+        <div id="calendar"></div>
+    </div>
+
+    <script>
+        const MACHINES = ["CNC_01", "CNC_02", "PUMP_03", "CONVEYOR_04"];
+        const SENSORS = ["temperature_C", "vibration_mm_s", "rpm", "current_A"];
+        const SENSOR_LABELS = {
+            temperature_C: "Temp °C", vibration_mm_s: "Vib mm/s",
+            rpm: "RPM", current_A: "Current A"
+        };
+
+        // Store last 60 readings per machine per sensor
+        const history = {};
+        MACHINES.forEach(m => { history[m] = {}; SENSORS.forEach(s => { history[m][s] = []; }); });
+
+        // Baselines (filled when first data arrives — approximated from first 10 readings)
+        const approxBaseline = {};
+
+        // Timeline chart
+        const ctx = document.getElementById("timeline-chart").getContext("2d");
+        const timelineChart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: Array(60).fill(""),
+                datasets: [
+                    {
+                        label: "Sensor", data: [], borderColor: "#00BFA6", borderWidth: 2,
+                        pointRadius: 0, tension: 0.3, fill: false
+                    },
+                    {
+                        label: "Baseline", data: [], borderColor: "#ffffff55", borderWidth: 1,
+                        borderDash: [5, 5], pointRadius: 0, fill: false
+                    },
+                ]
+            },
+            options: {
+                animation: false, responsive: true,
+                plugins: { legend: { labels: { color: "#8ECFCC", font: { size: 11 } } } },
+                scales: {
+                    x: { ticks: { color: "#8ECFCC", font: { size: 10 } }, grid: { color: "#1E2D5055" } },
+                    y: { ticks: { color: "#8ECFCC", font: { size: 10 } }, grid: { color: "#1E2D5055" } }
+                }
+            }
+        });
+
+        function updateTimelineChart() {
+            const machine = document.getElementById("chart-machine").value;
+            const sensor = document.getElementById("chart-sensor").value;
+            const vals = history[machine]?.[sensor] || [];
+            const baseline = approxBaseline[machine]?.[sensor];
+            timelineChart.data.datasets[0].data = [...vals];
+            timelineChart.data.datasets[1].data = baseline
+                ? Array(vals.length).fill(baseline.mean) : [];
+            timelineChart.data.labels = Array(vals.length).fill("").map((_, i) => i === vals.length - 1 ? "now" : "");
+            timelineChart.update("none");
+        }
+
+        document.getElementById("chart-machine").onchange = updateTimelineChart;
+        document.getElementById("chart-sensor").onchange = updateTimelineChart;
+
+        // Clock
+        setInterval(() => {
+            document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+        }, 1000);
+
+        // Health score computation
+        function healthScore(machine_id, readings) {
+            if (!readings || !approxBaseline[machine_id]) return 100;
+            let totalSigma = 0, count = 0;
+            SENSORS.forEach(s => {
+                if (readings[s] == null || !approxBaseline[machine_id]?.[s]) return;
+                const { mean, std } = approxBaseline[machine_id][s];
+                totalSigma += Math.abs(readings[s] - mean) / std;
+                count++;
+            });
+            if (!count) return 100;
+            return Math.max(0, Math.min(100, Math.round(100 - (totalSigma / count) * 20)));
+        }
+
+        function ringColor(score) {
+            if (score >= 80) return "#34D399";
+            if (score >= 40) return "#FF8A00";
+            return "#FF4D4D";
+        }
+
+        function cardClass(score) {
+            if (score >= 80) return "healthy";
+            if (score >= 40) return "medium";
+            return "critical";
+        }
+
+        function dotClass(sigma) {
+            if (sigma < 1.5) return "green";
+            if (sigma < 2.5) return "amber";
+            return "red";
+        }
+
+        function renderHealthRing(score) {
+            const c = ringColor(score);
+            const r = 28, cx = 40, cy = 40;
+            const circ = 2 * Math.PI * r;
+            const filled = circ * (score / 100);
+            return `<svg viewBox="0 0 80 80">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1E2D50" stroke-width="7"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${c}" stroke-width="7"
+      stroke-dasharray="${filled} ${circ}" stroke-linecap="round"
+      transform="rotate(-90 ${cx} ${cy})"/>
+    <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
+      fill="${c}" font-size="14" font-weight="bold">${score}</text>
+  </svg>`;
+        }
+
+        function renderMachineCards(readings, streams) {
+            const grid = document.getElementById("machines-grid");
+            grid.innerHTML = "";
+            MACHINES.forEach(m => {
+                const r = readings[m] || {};
+                const score = healthScore(m, r);
+                const cls = cardClass(score);
+                const status = streams[m] || "connecting";
+                const pillCls = status === "live" ? "live" : "reconnecting";
+
+                let sensorRows = "";
+                SENSORS.forEach(s => {
+                    const val = r[s] != null ? r[s].toFixed(2) : "--";
+                    const baseline = approxBaseline[m]?.[s];
+                    const sigma = baseline && r[s] != null
+                        ? Math.abs(r[s] - baseline.mean) / baseline.std : 0;
+                    const dc = dotClass(sigma);
+                    sensorRows += `<div class="sensor-row">
+        <span class="sensor-label">${SENSOR_LABELS[s]}</span>
+        <span class="sensor-val"><span class="dot ${dc}"></span>${val}</span>
+      </div>`;
+                });
+
+                grid.innerHTML += `<div class="machine-card ${cls}">
+      <div class="machine-name">${m}</div>
+      <div class="health-ring-wrap">${renderHealthRing(score)}</div>
+      ${sensorRows}
+      <span class="stream-pill ${pillCls}">${status.toUpperCase()}</span>
+    </div>`;
+            });
+        }
+
+        function renderHeatmap(readings) {
+            const hm = document.getElementById("heatmap");
+            hm.innerHTML = `<div class="hm-header"></div>
+    ${SENSORS.map(s => `<div class="hm-header">${SENSOR_LABELS[s]}</div>`).join("")}`;
+
+            MACHINES.forEach(m => {
+                hm.innerHTML += `<div class="hm-row-label">${m}</div>`;
+                SENSORS.forEach(s => {
+                    const r = readings[m];
+                    const val = r?.[s];
+                    const baseline = approxBaseline[m]?.[s];
+                    let bg = "#111D35", sigma = 0;
+                    if (val != null && baseline) {
+                        sigma = Math.abs(val - baseline.mean) / baseline.std;
+                        if (sigma >= 3) bg = "#FF4D4Daa";
+                        else if (sigma >= 2) bg = "#FF8A00aa";
+                        else if (sigma >= 1) bg = "#EF9F2744";
+                    }
+                    hm.innerHTML += `<div class="hm-cell" style="background:${bg}">
+        <div class="val">${val != null ? val.toFixed(1) : "--"}</div>
+        <div class="sig">${sigma > 0 ? sigma.toFixed(1) + "σ" : ""}</div>
+      </div>`;
+                });
+            });
+        }
+
+        function renderAlerts(alerts, scheduled) {
+            const list = document.getElementById("alert-list");
+            const reversed = [...alerts].reverse();
+            list.innerHTML = reversed.map(a => {
+                const borderColor = { CRITICAL: "#FF4D4D", HIGH: "#FF8A00", MEDIUM: "#EF9F27", LOW: "#34D399" }[a.severity] || "#888";
+                const slot = scheduled[a.machine_id];
+                const compoundPill = a.compound
+                    ? `<div class="compound-pill">${a.compound}</div>` : "";
+                const slotText = slot
+                    ? `<div class="slot-text">Maintenance: ${slot}</div>` : "";
+                const ackClass = a.acknowledged ? "acknowledged" : "";
+                const ackLabel = a.acknowledged ? "Acknowledged" : "Acknowledge";
+                return `<div class="alert-card ${ackClass}" style="border-left-color:${borderColor}">
+      <div class="top-row">
+        <span>
+          <span class="severity-badge badge-${a.severity}">${a.severity}</span>
+          <strong style="margin-left:6px">${a.machine_id}</strong>
+          <span style="color:#8ECFCC;font-size:11px;margin-left:6px">${a.confidence}%</span>
+        </span>
+        <span style="color:#555;font-size:11px">${a.time}</span>
+      </div>
+      ${compoundPill}
+      <div class="alert-msg">${a.message}</div>
+      ${slotText}
+      <button class="ack-btn" onclick="acknowledge('${a.machine_id}')">${ackLabel}</button>
+    </div>`;
+            }).join("");
+        }
+
+        function renderTTF(alerts) {
+            const panel = document.getElementById("ttf-list");
+            const ttfItems = {};
+            alerts.forEach(a => {
+                (a.drift || []).forEach(d => {
+                    if (d.ttf_min != null) {
+                        const key = `${a.machine_id}-${d.sensor}`;
+                        if (!ttfItems[key] || d.ttf_min < ttfItems[key].ttf_min) {
+                            ttfItems[key] = { machine: a.machine_id, ...d };
+                        }
+                    }
+                });
+            });
+
+            const items = Object.values(ttfItems);
+            if (!items.length) {
+                panel.innerHTML = `<div style="color:#34D399;font-size:13px">All machines stable</div>`;
+                return;
+            }
+
+            panel.innerHTML = items.map(item => {
+                const mins = item.ttf_min;
+                let cls = "green", display = "Stable";
+                if (mins !== null) {
+                    cls = mins < 10 ? "red" : mins < 30 ? "amber" : "green";
+                    const m = Math.floor(mins), s = Math.round((mins - m) * 60);
+                    display = `${m}m ${s}s`;
+                }
+                const label = {
+                    temperature_C: "Temperature", vibration_mm_s: "Vibration",
+                    rpm: "RPM", current_A: "Current"
+                }[item.sensor] || item.sensor;
+                return `<div class="ttf-item">
+      <div class="ttf-machine">${item.machine}</div>
+      <div class="ttf-countdown ${cls}">${display}</div>
+      <div class="ttf-sensor">${label} ${item.direction}</div>
+    </div>`;
+            }).join("");
+        }
+
+        function renderCalendar(scheduled) {
+            const cal = document.getElementById("calendar");
+            const entries = Object.entries(scheduled);
+            if (!entries.length) {
+                cal.innerHTML = `<div class="no-schedule">No maintenance scheduled yet.</div>`;
+                return;
+            }
+            cal.innerHTML = entries.map(([m, slot]) =>
+                `<div class="cal-item">
+      <div class="cal-check">✓</div>
+      <div><div class="cal-machine">${m}</div>
+      <div class="cal-slot">${slot}</div></div>
+    </div>`
+            ).join("");
+        }
+
+        function renderSystemicBanner(alerts) {
+            const banner = document.getElementById("systemic-banner");
+            const recent = alerts.filter(a => !a.acknowledged);
+            const criticalMachines = [...new Set(
+                recent.filter(a => ["HIGH", "CRITICAL"].includes(a.severity))
+                    .flatMap(a => a.correlated || []).concat(
+                        recent.filter(a => ["HIGH", "CRITICAL"].includes(a.severity))
+                            .map(a => a.machine_id)
+                    )
+            )];
+            if (criticalMachines.length >= 2) {
+                banner.style.display = "block";
+                banner.textContent = `SYSTEMIC ISSUE DETECTED — ${criticalMachines.join(", ")} showing correlated anomalies. Possible shared infrastructure failure.`;
+            } else {
+                banner.style.display = "none";
+            }
+        }
+
+        async function acknowledge(machine_id) {
+            await fetch("http://localhost:5000/acknowledge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ machine_id })
+            });
+        }
+
+        // Approximate baseline from first N readings
+        function updateApproxBaseline(readings) {
+            MACHINES.forEach(m => {
+                if (!readings[m]) return;
+                if (!approxBaseline[m]) approxBaseline[m] = {};
+                SENSORS.forEach(s => {
+                    const vals = history[m][s];
+                    if (vals.length < 5) return;
+                    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+                    const std = Math.max(0.01, Math.sqrt(
+                        vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length
+                    ));
+                    approxBaseline[m][s] = { mean, std };
+                });
+            });
+        }
+
+        // Main poll loop
+        async function poll() {
+            try {
+                const res = await fetch("/status");
+                const data = await res.json();
+
+                // Store readings history
+                MACHINES.forEach(m => {
+                    const r = data.readings?.[m];
+                    if (!r) return;
+                    SENSORS.forEach(s => {
+                        if (r[s] != null) {
+                            history[m][s].push(r[s]);
+                            if (history[m][s].length > 60) history[m][s].shift();
+                        }
+                    });
+                });
+
+                updateApproxBaseline(data.readings || {});
+                renderMachineCards(data.readings || {}, data.streams || {});
+                renderHeatmap(data.readings || {});
+                renderAlerts(data.alerts || [], data.scheduled || {});
+                renderTTF(data.alerts || []);
+                renderCalendar(data.scheduled || {});
+                renderSystemicBanner(data.alerts || []);
+                updateTimelineChart();
+
+                document.querySelector(".live-dot").style.background = "#00BFA6";
+                document.querySelector(".live-dot").style.animation = "pulse 1.5s infinite";
+
+            } catch (e) {
+                console.error("API disconnected:", e);
+                document.querySelector(".live-dot").style.background = "#FF4D4D";
+                document.querySelector(".live-dot").style.animation = "none";
+            }
+        }
+
+        setInterval(poll, 2000);
+        poll();
+    </script>
+</body>
+
+</html>
