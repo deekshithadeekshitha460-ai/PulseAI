@@ -24,6 +24,9 @@ scheduled_slots  = {}   # machine_id → scheduled slot string
 acknowledged     = defaultdict(float)  # machine_id → timestamp of ack
 state_lock       = threading.Lock()    # prevents race conditions
 active_maintenance = set()               # machines currently being scheduled
+nudge_count = 0                         # how many times we've refined baselines
+nudge_lock = threading.Lock()
+baselines_ref = [None]                  # global reference to baselines
 
 
 def post_alert(machine_id, message, severity, confidence, reading):
@@ -103,6 +106,19 @@ def on_reading(machine_id, reading, baselines_ref):
     # Analyze this reading
     result = analyze(machine_id, reading, baselines)
 
+    # ── SELF-LEARNING (NUDGE) ──────────────────────────────────────────
+    # If it's super healthy (risk < 20), nudge the baseline slightly
+    if result["risk_score"] < 20:
+        with nudge_lock:
+            global nudge_count
+            nudge_count += 1
+            if nudge_count % 300 == 0:  # Log every 5 mins of healthy stream
+                print(f"[SELF-LEARNING] PulseAI has refined {nudge_count} baselines based on recent healthy operations.")
+        
+        for sensor, val in reading.items():
+            if sensor in SENSORS:
+                baselines_ref[0] = adapt_baseline(baselines_ref[0], machine_id, sensor, val, type="nudge")
+
     # Only act on MEDIUM severity or above (score >= 40)
     if result["risk_score"] < 40:
         return
@@ -143,13 +159,6 @@ def on_reading(machine_id, reading, baselines_ref):
         daemon=True
     ).start()
 
-    # Self-learning: nudge baseline toward observed value after alert
-    # ONLY if risk is low (don't learn from noise/faults)
-    if result["risk_score"] < 40:
-        for t in result["triggered"]:
-            baselines_ref[0] = adapt_baseline(
-                baselines_ref[0], machine_id, t["sensor"], t["value"]
-            )
     
     # POST /schedule-maintenance for HIGH and CRITICAL (with throttling)
     if result["severity"] in ("HIGH", "CRITICAL"):
@@ -192,9 +201,23 @@ def acknowledge():
     if machine_id:
         acknowledged[machine_id] = time.time()
         with state_lock:
+            # 1. Mark as acknowledged on dash
             for a in alert_history:
                 if a["machine_id"] == machine_id:
                     a["acknowledged"] = True
+            
+            # 2. PERFORM EXPLICIT REFINEMENT
+            # Find the latest reading that was alerted on
+            latest_alert = next((a for a in reversed(alert_history) if a["machine_id"] == machine_id), None)
+            if latest_alert and "reading" in latest_alert:
+                reading = latest_alert["reading"]
+                for sensor, val in reading.items():
+                    if sensor in SENSORS:
+                        baselines_ref[0] = adapt_baseline(
+                            baselines_ref[0], machine_id, sensor, val, type="refinement"
+                        )
+                print(f"[REFINEMENT] Operator acknowledged {machine_id}. PulseAI has refined the baseline thresholds.")
+
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 400
 
@@ -217,7 +240,8 @@ def main():
     # Step 1: Load 7-day history and compute baselines
     print("Step 1: Loading machine baselines from 7-day history...")
     baselines = compute_baselines()
-    baselines_ref = [baselines]  # wrap in list so threads can mutate it
+    global baselines_ref
+    baselines_ref[0] = baselines
     print("Baselines ready.\n")
 
     # Step 2: Start Flask dashboard server

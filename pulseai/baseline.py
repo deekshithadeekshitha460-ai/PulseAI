@@ -43,14 +43,20 @@ def compute_baselines():
                   f"std={baselines[machine_id][sensor]['std']:.2f}")
     return baselines
 
-def adapt_baseline(baselines, machine_id, sensor, new_value):
+def adapt_baseline(baselines, machine_id, sensor, new_value, type="nudge"):
     """
-    Self-learning: slowly adjust baseline after each alert resolves.
-    alpha=0.05 means we move 5% toward the new observation each time.
+    Continuous Self-Learning Engine.
+    'nudge'     = 0.5% shift (continuous normalization of healthy data)
+    'refinement' = 5.0% shift (explicit operator acknowledgment)
     """
     b = baselines[machine_id][sensor]
-    alpha = 0.05
+    alpha = 0.005 if type == "nudge" else 0.05
+    
+    old_mean = b["mean"]
     b["mean"] = (1 - alpha) * b["mean"] + alpha * new_value
+    
+    # Safety: Don't let mean drift by more than 50% from original without a sanity check
+    # (Simplified for the hackathon)
     return baselines
 
 # Test: run this file directly to see baselines
