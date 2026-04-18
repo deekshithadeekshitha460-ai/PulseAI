@@ -318,6 +318,23 @@
             display: inline-block;
         }
 
+        .ttf-pill {
+            background: #FF8A0022;
+            color: #FF8A00;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-top: 4px;
+            display: inline-block;
+        }
+
+        .ttf-pill.urgent {
+            background: #FF4D4D22;
+            color: #FF4D4D;
+            animation: pulse 1s infinite;
+        }
+
         .alert-msg {
             font-family: monospace;
             color: #ccc;
@@ -708,6 +725,17 @@
                     ? `<div class="slot-text">Maintenance: ${slot}</div>` : "";
                 const ackClass = a.acknowledged ? "acknowledged" : "";
                 const ackLabel = a.acknowledged ? "Acknowledged" : "Acknowledge";
+
+                // Find shortest TTF for this alert (if any)
+                let shortestTTF = null;
+                if (a.drift && a.drift.length > 0) {
+                    const ttfs = a.drift.filter(d => d.ttf_min !== null).map(d => d.ttf_min);
+                    if (ttfs.length > 0) shortestTTF = Math.min(...ttfs);
+                }
+                const ttfPill = shortestTTF !== null 
+                    ? `<div class="ttf-pill ${shortestTTF < 10 ? 'urgent' : ''}">FAIL IN: ${Math.floor(shortestTTF)}m</div>`
+                    : "";
+
                 return `<div class="alert-card ${ackClass}" style="border-left-color:${borderColor}">
       <div class="top-row">
         <span>
@@ -717,7 +745,10 @@
         </span>
         <span style="color:#555;font-size:11px">${a.time}</span>
       </div>
-      ${compoundPill}
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${compoundPill}
+        ${ttfPill}
+      </div>
       <div class="alert-msg">${a.message}</div>
       ${slotText}
       <button class="ack-btn" onclick="acknowledge('${a.machine_id}')">${ackLabel}</button>

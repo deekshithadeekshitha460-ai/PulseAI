@@ -121,12 +121,29 @@ def explain(machine_id, analysis):
             ttf_str = " — Critical in < 1 min" if d["ttf_min"] == 0 else f" — projected failure in {d['ttf_min']}m"
         lines.append(f"  • {label} Trend: {d['direction']} at {abs(d['rate']):.2f}{unit}/s{ttf_str}")
 
-    # 3. SYSTEMIC CONTEXT
+    # 3. PREDICTIVE TIMELINE
+    # Find the most urgent drift (shortest TTF)
+    urgent_drift = None
+    if drift:
+        valid_ttfs = [d for d in drift if d["ttf_min"] is not None]
+        if valid_ttfs:
+            urgent_drift = min(valid_ttfs, key=lambda x: x["ttf_min"])
+
+    if urgent_drift:
+        label, _, _ = SENSOR_META.get(urgent_drift["sensor"], (urgent_drift["sensor"], "", ""))
+        mins = urgent_drift["ttf_min"]
+        
+        ttf_phrase = "in less than 1 minute" if mins == 0 else f"in approximately {mins} minutes"
+        
+        lines.append(f"\n[PREDICTIVE TIMELINE]")
+        lines.append(f"  At current drift rate, {machine_id} will exceed safe {label} limits {ttf_phrase}.")
+
+    # 4. SYSTEMIC CONTEXT
     if correlated:
         lines.append(f"\n[SYSTEMIC CONTEXT]")
         lines.append(f"  Identified correlated behavior on {', '.join(correlated)}. This may be a facility-wide power/cooling issue.")
 
-    # 4. RECOMMENDED ACTION
+    # 5. RECOMMENDED ACTION
     lines.append(f"\n[RECOMMENDED ACTION]")
     if hypothesis:
         lines.append(f"  {hypothesis['action']}")
