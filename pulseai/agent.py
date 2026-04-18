@@ -1,5 +1,5 @@
 import time
-import heapq
+import queue
 import requests
 import threading
 from collections import defaultdict
@@ -27,6 +27,7 @@ active_maintenance = set()               # machines currently being scheduled
 nudge_count = 0                         # how many times we've refined baselines
 nudge_lock = threading.Lock()
 baselines_ref = [None]                  # global reference to baselines
+maintenance_queue = queue.PriorityQueue()
 
 
 def post_alert(machine_id, message, severity, confidence, reading):
@@ -80,6 +81,23 @@ def schedule_maintenance(machine_id):
         with state_lock:
             if machine_id in active_maintenance:
                 active_maintenance.remove(machine_id)
+
+
+def maintenance_worker():
+    """
+    Priority Queue Worker.
+    Processes maintenance requests based on risk score (highest priority first).
+    """
+    while True:
+        # Get next item from queue: (priority, machine_id)
+        # We use -risk_score for priority because PriorityQueue is min-heap
+        priority, machine_id = maintenance_queue.get()
+        print(f"[QUEUE] Processing maintenance for {machine_id} (Priority: {-priority})")
+        
+        schedule_maintenance(machine_id)
+        
+        maintenance_queue.task_done()
+        time.sleep(1) # Small delay between schedule calls to avoid API stress
 
 
 def is_acknowledged(machine_id):
@@ -160,20 +178,18 @@ def on_reading(machine_id, reading, baselines_ref):
     ).start()
 
     
-    # POST /schedule-maintenance for HIGH and CRITICAL (with throttling)
+    # POST /schedule-maintenance for HIGH and CRITICAL (via Priority Queue)
     if result["severity"] in ("HIGH", "CRITICAL"):
-        should_schedule = False
+        should_queue = False
         with state_lock:
             if machine_id not in active_maintenance and machine_id not in scheduled_slots:
                 active_maintenance.add(machine_id)
-                should_schedule = True
+                should_queue = True
         
-        if should_schedule:
-            threading.Thread(
-                target=schedule_maintenance,
-                args=(machine_id,),
-                daemon=True
-            ).start()
+        if should_queue:
+            # Negate risk_score so highest score is served first (PriorityQueue is min-heap)
+            maintenance_queue.put((-result["risk_score"], machine_id))
+            print(f"[QUEUE ADDED] {machine_id} added to priority queue (Risk: {result['risk_score']})")
 
 
 # ── Flask server for dashboard ────────────────────────────────────────
@@ -247,7 +263,10 @@ def main():
     # Step 2: Start Flask dashboard server
     print("Step 2: Starting dashboard API on http://localhost:5000...")
     threading.Thread(target=start_flask, daemon=True).start()
-    print("Dashboard API running.\n")
+    
+    # Start Maintenance Queue Worker
+    threading.Thread(target=maintenance_worker, daemon=True).start()
+    print("Dashboard and Priority Queue worker running.\n")
 
     # Step 3: Start all 4 machine streams
     print("Step 3: Connecting to all 4 machine streams...")

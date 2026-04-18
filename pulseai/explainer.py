@@ -94,7 +94,17 @@ def explain(machine_id, analysis):
     if not triggered and not drift:
         return f"{machine_id}: All readings within normal range."
 
-    lines = [f"{machine_id} — {severity} alert ({confidence}% confidence)"]
+    # Build verbal confidence reason
+    sensors_involved = [SENSOR_META.get(t["sensor"], (t["sensor"], "", ""))[0] for t in triggered]
+    if not sensors_involved and drift:
+        sensors_involved = [SENSOR_META.get(d["sensor"], (d["sensor"], "", ""))[0] for d in drift]
+    
+    sensor_str = " + ".join(list(set(sensors_involved)))
+    p_sec = analysis.get("persistence_sec", 0)
+    dur_str = f"{p_sec} seconds" if p_sec < 60 else f"{p_sec // 60} minutes"
+    
+    conf_reason = f"based on {sensor_str} pattern over {dur_str}"
+    lines = [f"{machine_id} — {severity} alert ({confidence}% confidence — {conf_reason})"]
 
     # 1. ROOT CAUSE REASONING
     systemic = analysis.get("systemic")

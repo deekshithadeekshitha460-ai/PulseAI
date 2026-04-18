@@ -283,10 +283,19 @@ def analyze(machine_id, reading, baselines):
     risk_score = min(100, int(base_score * (1 + compound_boost)))
 
     # ── CONFIDENCE % ──────────────────────────────────────────────────
-    # Higher sigma + longer consecutive count = higher confidence
-    confidence = min(99, 50 + risk_score // 3
-                     + consecutive_anomaly_count[machine_id] * 2
-                     + (10 if compound_name else 0))
+    # Persistence = consecutive readings (1 per second)
+    persistence_sec = consecutive_anomaly_count[machine_id]
+    
+    # Pattern weight (up to 20%)
+    pattern_weight = (compound_result["match_confidence"] * 0.2) if compound_result else 0
+    
+    # Persistence weight (up to 30%, caps at 5 minutes / 300s)
+    persistence_weight = min(30.0, (persistence_sec / 300.0) * 30.0)
+    
+    # Signal weight (up to 50%)
+    signal_weight = min(50.0, (max_sigma / 5.0) * 50.0)
+    
+    confidence = int(min(99, signal_weight + pattern_weight + persistence_weight))
 
     # ── SEVERITY CLASSIFICATION ───────────────────────────────────────
     def classify(score):
@@ -303,6 +312,7 @@ def analyze(machine_id, reading, baselines):
         "compound_result":     compound_result,
         "systemic":            systemic_issue,
         "confidence":          confidence,
+        "persistence_sec":     persistence_sec,
         "correlated_machines": correlated_machines,
         "severity":            classify(risk_score)
     }
