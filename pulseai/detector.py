@@ -85,24 +85,82 @@ def estimate_time_to_failure(machine_id, sensor, current_value, baseline):
     return minutes
 
 
-def detect_compound_failure(triggered_sensors):
+def detect_compound_failure(triggered_sensors, drifts):
     """
-    Known multi-sensor failure signatures.
-    Real bearing failures show BOTH rising vibration AND rising current.
-    Real motor overloads show BOTH rising temperature AND rising current.
+    Evaluates complex failure signatures (Fingerprints).
+    A fingerprint matches if:
+    1. At least one of its core sensors is triggered.
+    2. All of its trend requirements (rising/falling/stable) are met.
     """
-    sensor_names = {t["sensor"] for t in triggered_sensors}
+    # Fingerprint Registry (Integrated from MITRE-style design)
+    FINGERPRINTS = [
+        {
+            "id": "PF-01",
+            "name": "Lubrication Starvation (Bearing)",
+            "patterns": {"vibration_mm_s": "rising", "current_A": "rising", "temperature_C": "stable"},
+            "boost": 0.25
+        },
+        {
+            "id": "PF-02",
+            "name": "Heavy Stator/Motor Overload",
+            "patterns": {"current_A": "rising", "temperature_C": "rising", "rpm": "falling"},
+            "boost": 0.30
+        },
+        {
+            "id": "PF-03",
+            "name": "Dynamic Resonance Instability",
+            "patterns": {"vibration_mm_s": "rising", "rpm": "stable"},
+            "boost": 0.15
+        },
+        {
+            "id": "PF-04",
+            "name": "Cooling System Impairment",
+            "patterns": {"temperature_C": "rising", "current_A": "stable"},
+            "boost": 0.20
+        }
+    ]
 
-    if {"vibration_mm_s", "current_A"} <= sensor_names:
-        return "Bearing failure signature", 0.20
-    if {"temperature_C", "current_A"} <= sensor_names:
-        return "Motor overload signature", 0.20
-    if {"vibration_mm_s", "rpm"} <= sensor_names:
-        return "Mechanical resonance signature", 0.15
-    if {"temperature_C", "vibration_mm_s", "current_A"} <= sensor_names:
-        return "Imminent multi-system failure", 0.30
+    best_match = None
+    max_confidence = 0
 
-    return None, 0.0
+    # Get the state of every sensor: rising, falling, or stable
+    # Default to 'stable' if no drift is explicitly detected
+    sensor_trends = {s: "stable" for s in SENSORS}
+    for d in drifts:
+        sensor_trends[d["sensor"]] = d["direction"]
+
+    triggered_names = {t["sensor"] for t in triggered_sensors}
+
+    for fp in FINGERPRINTS:
+        # 1. Check if at least one sensor in the pattern is actually anomalous (triggered)
+        if not any(s in triggered_names for s in fp["patterns"].keys()):
+            continue
+
+        # 2. Check if all trends in the pattern match the current state
+        match_count = 0
+        total_criteria = len(fp["patterns"])
+        
+        for sensor, expected_trend in fp["patterns"].items():
+            if sensor_trends.get(sensor) == expected_trend:
+                match_count += 1
+        
+        # Calculate fingerprint confidence (0.0 to 1.0)
+        confidence = match_count / total_criteria
+        
+        # We only consider it a 'match' if at least 2/3 of the pattern matches
+        if confidence >= 0.66 and (not best_match or confidence > max_confidence):
+            best_match = fp
+            max_confidence = confidence
+
+    if best_match:
+        return {
+            "id": best_match["id"],
+            "name": best_match["name"],
+            "boost": best_match["boost"],
+            "match_confidence": round(max_confidence * 100, 1)
+        }
+
+    return None
 
 
 def check_cross_machine_correlation(machine_id, sensor):
@@ -194,7 +252,9 @@ def analyze(machine_id, reading, baselines):
         triggered = []  # too early to fire — might be noise
 
     # ── COMPOUND DETECTION ────────────────────────────────────────────
-    compound_name, compound_boost = detect_compound_failure(triggered)
+    compound_result = detect_compound_failure(triggered, drift_flags)
+    compound_name = compound_result["name"] if compound_result else None
+    compound_boost = compound_result["boost"] if compound_result else 0.0
 
     # ── CROSS-MACHINE CORRELATION ─────────────────────────────────────
     correlated_machines = []
@@ -226,6 +286,7 @@ def analyze(machine_id, reading, baselines):
         "triggered":           triggered,
         "drift_flags":         drift_flags,
         "compound":            compound_name,
+        "compound_result":     compound_result,
         "confidence":          confidence,
         "correlated_machines": correlated_machines,
         "severity":            classify(risk_score)

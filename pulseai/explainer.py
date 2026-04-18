@@ -7,44 +7,66 @@ SENSOR_META = {
 
 FAILURE_MODES = [
     {
-        "id": "bearing_wear",
-        "name": "Advanced Bearing Degradation",
-        "sensors": {"vibration_mm_s", "temperature_C"},
-        "description": "Rising vibration paired with increased heat suggests a breakdown in bearing lubrication and friction-heavy metal contact.",
-        "action": "Immediate lubrication check. Schedule bearing replacement within 48 hours."
+        "id": "PF-01",
+        "name": "Lubrication Starvation (Bearing)",
+        "patterns": {
+            "vibration_mm_s": "rising",
+            "current_A": "rising",
+            "temperature_C": "stable"
+        },
+        "description": "High-frequency vibration and motor drag without thermal spikes. Classic signature of lubrication loss before friction heat builds up.",
+        "action": "Immediate lubrication cycle. Inspect bearing housing for seal leaks."
     },
     {
-        "id": "motor_overload",
-        "name": "Motor Overload / Winding Heat",
-        "sensors": {"current_A", "temperature_C"},
-        "description": "Excessive current draw and thermal rise indicate the motor is working beyond its torque rating, likely due to a mechanical obstruction.",
-        "action": "Reduce load immediately. Inspect the drive-train for physical jams or debris."
+        "id": "PF-02",
+        "name": "Heavy Stator/Motor Overload",
+        "patterns": {
+            "current_A": "rising",
+            "temperature_C": "rising",
+            "rpm": "falling"
+        },
+        "description": "Simultaneous current and thermal rise with loss of rotational speed. Indicates the motor is physically bound or severely over-torqued.",
+        "action": "Halt operation. Inspect drive-train for mechanical jams or electrical phase imbalance."
     },
     {
-        "id": "mechanical_obstruction",
-        "name": "Mechanical Transmission Drag",
-        "sensors": {"current_A", "rpm"},
-        "description": "Dropping RPM despite higher current suggests the motor is struggling to maintain speed against high resistance.",
-        "action": "Inspect belts, gears, and pulley alignment for signs of slipping or binding."
+        "id": "PF-03",
+        "name": "Dynamic Resonance Instability",
+        "patterns": {
+            "vibration_mm_s": "rising",
+            "rpm": "stable"
+        },
+        "description": "Vibration intensity increases while RPM remains steady. Suggests operation at a natural frequency of the machine structure.",
+        "action": "Adjust operating frequency (RPM) by ±5%. Verify torque on mounting bolts."
     },
     {
-        "id": "resonance",
-        "name": "High-Frequency Resonance",
-        "sensors": {"vibration_mm_s", "rpm"},
-        "description": "Vibration spikes at specific RPM ranges suggest mechanical resonance or misalignment.",
-        "action": "Perform dynamic balancing and check machine mounting bolts for loosening."
+        "id": "PF-04",
+        "name": "Cooling System Impairment",
+        "patterns": {
+            "temperature_C": "rising",
+            "current_A": "stable"
+        },
+        "description": "Temperature rise detected while electrical load remains constant. Likely indicative of fan failure, coolant leak, or radiator clogging.",
+        "action": "Check cooling fans and heat sinks. Clean airflow obstructions immediately."
     }
 ]
 
-def get_root_cause(triggered_sensors):
+def get_root_cause(triggered_sensors, compound_result=None):
     """
     Correlates multiple sensor triggers to identify a likely failure mode.
+    Prioritizes matched Compound Fingerprints.
     """
-    sensor_names = {t["sensor"] for t in triggered_sensors}
+    if compound_result:
+        for mode in FAILURE_MODES:
+            if mode["id"] == compound_result["id"]:
+                # Add the match confidence to the mode for display
+                mode_copy = mode.copy()
+                mode_copy["match_confidence"] = compound_result["match_confidence"]
+                return mode_copy
     
-    # Check for complex matches first
+    # Fallback to simple membership check (if detector didn't find a fingerprint)
+    sensor_names = {t["sensor"] for t in triggered_sensors}
     for mode in FAILURE_MODES:
-        if mode["sensors"].issubset(sensor_names):
+        if "sensors" in mode and mode["sensors"].issubset(sensor_names):
             return mode
             
     # Default behavior: pick the most significant sensor's basic cause
@@ -75,10 +97,15 @@ def explain(machine_id, analysis):
     lines = [f"{machine_id} — {severity} alert ({confidence}% confidence)"]
 
     # 1. ROOT CAUSE REASONING
-    hypothesis = get_root_cause(triggered)
+    hypothesis = get_root_cause(triggered, analysis.get("compound_result"))
     if hypothesis:
         lines.append(f"\n[DIAGNOSTIC HYPOTHESIS]")
-        lines.append(f"  {hypothesis['name']}")
+        if "id" in hypothesis:
+            lines.append(f"  {hypothesis['id']}: {hypothesis['name']}")
+            if "match_confidence" in hypothesis:
+                lines.append(f"  Confidence: {hypothesis['match_confidence']}%")
+        else:
+            lines.append(f"  {hypothesis['name']}")
         lines.append(f"  {hypothesis['description']}")
 
     # 2. SENSOR EVIDENCE
