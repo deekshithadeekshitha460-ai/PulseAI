@@ -98,49 +98,51 @@ def explain(machine_id, analysis):
     sensors_involved = [SENSOR_META.get(t["sensor"], (t["sensor"], "", ""))[0] for t in triggered]
     if not sensors_involved and drift:
         sensors_involved = [SENSOR_META.get(d["sensor"], (d["sensor"], "", ""))[0] for d in drift]
-    
-    sensor_str = " + ".join(list(set(sensors_involved)))
+       sensor_str = " + ".join(list(set(sensors_involved)))
     p_sec = analysis.get("persistence_sec", 0)
     dur_str = f"{p_sec} seconds" if p_sec < 60 else f"{p_sec // 60} minutes"
     
     conf_reason = f"based on {sensor_str} pattern over {dur_str}"
-    lines = [f"{machine_id} — {severity} alert ({confidence}% confidence — {conf_reason})"]
+    
+    # --- PROTOCOL-BASED REPORT GENERATION ---
+    lines = []
+    
+    # I. IDENTIFICATION SUMMARY
+    lines.append(f"[IDENTIFICATION]")
+    lines.append(f"  Machine:    {machine_id}")
+    lines.append(f"  Severity:   {severity}")
+    lines.append(f"  Confidence: {confidence}% ({conf_reason})")
 
-    # 1. ROOT CAUSE REASONING
+    # II. ROOT CAUSE & HYPOTHESIS
+    lines.append(f"\n[ROOT CAUSE ANALYSIS]")
     systemic = analysis.get("systemic")
     hypothesis = get_root_cause(triggered, analysis.get("compound_result"))
-    
+
     if systemic:
-        lines.append(f"\n[SYSTEMIC CONTEXT — INFRASTRUCTURE ALERT]")
-        lines.append(f"  {systemic['id']}: {systemic['name']}")
-        lines.append(f"  Victims: {machine_id}, {', '.join(correlated)}")
-        lines.append(f"  Hypothesis: Shared environmental/power failure confirmed across multiple nodes.")
+        lines.append(f"  • SYSTEMIC ALERT: {systemic['id']} ({systemic['name']})")
+        lines.append(f"    Cross-node sync detected across {len(correlated) + 1} machines.")
+        lines.append(f"    Hypothesis: Shared environmental or grid-level infrastructure failure.")
 
     if hypothesis:
-        lines.append(f"\n[DIAGNOSTIC HYPOTHESIS]")
         if "id" in hypothesis:
-            lines.append(f"  {hypothesis['id']}: {hypothesis['name']}")
-            if "match_confidence" in hypothesis:
-                lines.append(f"  Confidence: {hypothesis['match_confidence']}%")
+            lines.append(f"  • {hypothesis['id']}: {hypothesis['name']}")
         else:
-            lines.append(f"  {hypothesis['name']}")
-        lines.append(f"  {hypothesis['description']}")
+            lines.append(f"  • {hypothesis['name']}")
+        lines.append(f"    Analysis: {hypothesis['description']}")
+    else:
+        lines.append(f"  • Undefined mechanical deviation.")
 
-    # 2. SENSOR EVIDENCE
-    lines.append(f"\n[SENSOR EVIDENCE]")
+    # III. SENSOR EVIDENCE
+    lines.append(f"\n[SENSOR EVIDENCE & METRICS]")
     for t in triggered:
         label, unit, _ = SENSOR_META.get(t["sensor"], (t["sensor"], "", ""))
-        lines.append(f"  • {label}: {t['value']}{unit} ({t['sigma']:.1f} sigma deviation)")
+        lines.append(f"  • {label}: {t['value']}{unit} ({t['sigma']:.1f}σ deviation)")
 
     for d in drift:
         label, unit, _ = SENSOR_META.get(d["sensor"], (d["sensor"], "", ""))
-        ttf_str = ""
-        if d["ttf_min"] is not None:
-            ttf_str = " — Critical in < 1 min" if d["ttf_min"] == 0 else f" — projected failure in {d['ttf_min']}m"
-        lines.append(f"  • {label} Trend: {d['direction']} at {abs(d['rate']):.2f}{unit}/s{ttf_str}")
+        lines.append(f"  • {label} Trend: {d['direction']} at {abs(d['rate']):.2f}{unit}/s")
 
-    # 3. PREDICTIVE TIMELINE
-    # Find the most urgent drift (shortest TTF)
+    # IV. PREDICTIVE TIMELINE
     urgent_drift = None
     if drift:
         valid_ttfs = [d for d in drift if d["ttf_min"] is not None]
@@ -150,20 +152,21 @@ def explain(machine_id, analysis):
     if urgent_drift:
         label, _, _ = SENSOR_META.get(urgent_drift["sensor"], (urgent_drift["sensor"], "", ""))
         mins = urgent_drift["ttf_min"]
-        
-        ttf_phrase = "in less than 1 minute" if mins == 0 else f"in approximately {mins} minutes"
-        
+        ttf_phrase = "in < 1 min" if mins == 0 else f"in ~{mins} minutes"
         lines.append(f"\n[PREDICTIVE TIMELINE]")
-        lines.append(f"  At current drift rate, {machine_id} will exceed safe {label} limits {ttf_phrase}.")
-
-    # 4. SYSTEMIC CONTEXT
-    # (Removed redundant systemic section as it is now part of the top Hypothesis)
-
-    # 5. RECOMMENDED ACTION
-    lines.append(f"\n[RECOMMENDED ACTION]")
-    if hypothesis:
-        lines.append(f"  {hypothesis['action']}")
+        lines.append(f"  Arrival at critical threshold: {ttf_phrase} (via {label}).")
     else:
-        lines.append("  Visual inspection and routine maintenance check requested.")
+        lines.append(f"\n[PREDICTIVE TIMELINE]")
+        lines.append(f"  No immediate threshold violation projected.")
+
+    # V. ACTION PROTOCOL
+    lines.append(f"\n[ACTION PROTOCOL]")
+    if hypothesis:
+        lines.append(f"  1. {hypothesis['action']}")
+        lines.append(f"  2. Log diagnostic result and monitor following maintenance.")
+    else:
+        lines.append("  1. Visual inspection of physical machine state.")
+        lines.append("  2. Perform manual calibration of anomalous sensors.")
 
     return "\n".join(lines)
+"\n".join(lines)
